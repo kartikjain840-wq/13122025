@@ -4,7 +4,7 @@ import pandas as pd
 import time
 import re
 import unicodedata
-from duckduckgo_search import DDGS
+#from duckduckgo_search import DDGS
 
 # ------------------------------------------------------
 # PAGE CONFIGURATION
