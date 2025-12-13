@@ -1,181 +1,304 @@
 import streamlit as st
-import os
+import pandas as pd
+import plotly.express as px
+import os, re, requests
 from pathlib import Path
 from datetime import datetime
 import fitz  # PyMuPDF
 from pptx import Presentation
 import nltk
 from nltk.tokenize import sent_tokenize
-import webbrowser
 
-# ------------------ NLTK SETUP ------------------
 nltk.download("punkt")
 
-# =================================================
+# ======================================================
 # PAGE CONFIG
-# =================================================
+# ======================================================
 st.set_page_config(
-    page_title="Faber Nexus | Internal Knowledge OS",
-    page_icon="📂",
-    layout="wide"
+    page_title="Faber Nexus | Consulting Knowledge OS",
+    page_icon="🚀",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# =================================================
-# INTERNAL STATIC PROJECTS
-# =================================================
-INTERNAL_PROJECTS = [
+# ======================================================
+# CSS
+# ======================================================
+st.markdown("""
+<style>
+.stApp { background-color: #f8fafc; }
+h1, h2, h3 { color: #1e3a5f; }
+.stButton>button {
+    background-color: #208C8D;
+    color: white;
+    border-radius: 8px;
+    font-weight: 600;
+}
+.badge {
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+.verified { background-color: #e6f9ee; color: #067647; }
+.indicative { background-color: #fff4e5; color: #92400e; }
+</style>
+""", unsafe_allow_html=True)
+
+# ======================================================
+# MASTER LISTS (RESTORED)
+# ======================================================
+INDUSTRIES = [
+    "Automotive", "Pharmaceuticals", "FMCG / CPG", "Heavy Engineering",
+    "Textiles", "Logistics", "Healthcare", "Retail"
+]
+
+TOOLS = [
+    "Value Stream Mapping (VSM)", "5S & Workplace Org", "Hoshin Kanri",
+    "Total Productive Maintenance (TPM)", "Six Sigma", "Lean", "Kanban"
+]
+
+REGIONS = [
+    "India", "United States", "United Kingdom", "Germany",
+    "France", "UAE", "Singapore", "Australia", "South Africa"
+]
+
+# ======================================================
+# INTERNAL CONSULTING CASES
+# ======================================================
+INTERNAL_CASES = [
     {
         "type": "case",
-        "title": "Maruti Suzuki – VSM Transformation",
-        "summary": "Value stream mapping reduced waste by 28% across assembly lines.",
+        "title": "Maruti Suzuki – Assembly VSM",
+        "summary": "Value Stream Mapping reduced waste and rework across assembly lines.",
         "industry": "Automotive",
-        "tool": "VSM",
-        "date": datetime(2024, 10, 12),
-        "source": "Internal Case"
+        "tool": "Value Stream Mapping (VSM)",
+        "date": datetime(2024, 10, 15),
+        "impact": "35% Cycle Time Reduction",
+        "savings": "₹45 Cr"
     },
     {
         "type": "case",
         "title": "Apollo Hospitals – 5S Rollout",
-        "summary": "5S implementation improved OT turnaround time by 27%.",
+        "summary": "5S deployment improved OT turnaround time and utilisation.",
         "industry": "Healthcare",
-        "tool": "5S",
+        "tool": "5S & Workplace Org",
         "date": datetime(2024, 9, 20),
-        "source": "Internal Case"
+        "impact": "27% OT Utilisation Increase",
+        "savings": "₹12 Cr"
     }
 ]
 
-# =================================================
-# FILE SCANNING
-# =================================================
-def scan_folder(folder_path):
+# ======================================================
+# FILE SCANNING + AI TAGGING
+# ======================================================
+def scan_folder(path):
     files = []
-    for root, _, filenames in os.walk(folder_path):
+    for root, _, filenames in os.walk(path):
         for f in filenames:
-            path = os.path.join(root, f)
-            stat = os.stat(path)
+            full = os.path.join(root, f)
+            stat = os.stat(full)
             files.append({
                 "type": "file",
                 "title": f,
-                "path": path,
-                "extension": Path(f).suffix.lower(),
+                "path": full,
+                "ext": Path(f).suffix.lower(),
                 "date": datetime.fromtimestamp(stat.st_mtime)
             })
     return files
 
-# =================================================
-# FILE CONTENT EXTRACTION
-# =================================================
 def extract_text(file):
-    ext = file["extension"]
-    path = file["path"]
-
     try:
-        if ext == ".pdf":
-            doc = fitz.open(path)
-            return " ".join(page.get_text() for page in doc)[:3000]
-
-        if ext in [".ppt", ".pptx"]:
-            prs = Presentation(path)
-            text = ""
-            for slide in prs.slides:
-                for shape in slide.shapes:
-                    if hasattr(shape, "text"):
-                        text += shape.text + " "
-            return text[:3000]
+        if file["ext"] == ".pdf":
+            doc = fitz.open(file["path"])
+            return " ".join(p.get_text() for p in doc)[:3000]
+        if file["ext"] in [".ppt", ".pptx"]:
+            prs = Presentation(file["path"])
+            return " ".join(
+                shape.text for slide in prs.slides
+                for shape in slide.shapes if hasattr(shape, "text")
+            )[:3000]
     except:
         return ""
-
     return ""
 
-# =================================================
-# AI-STYLE AUTO SUMMARY + TAGGING (LOCAL)
-# =================================================
 def ai_summary_and_tags(text):
     if not text:
         return "No preview available", ["Unclassified"]
 
-    sentences = sent_tokenize(text)
-    summary = " ".join(sentences[:2])
-
+    sents = sent_tokenize(text)
+    summary = " ".join(sents[:2])
     tags = []
-    text_l = text.lower()
+    t = text.lower()
 
-    if "vsm" in text_l: tags.append("VSM")
-    if "5s" in text_l: tags.append("5S")
-    if "lean" in text_l: tags.append("Lean")
-    if "tpm" in text_l: tags.append("TPM")
-    if "six sigma" in text_l: tags.append("Six Sigma")
+    for k in ["vsm", "5s", "lean", "tpm", "six sigma", "kanban"]:
+        if k in t:
+            tags.append(k.upper())
 
     return summary, tags if tags else ["General"]
 
-# =================================================
-# UI — FOLDER INPUT
-# =================================================
-st.title("📂 FABER NEXUS — Internal Knowledge OS")
-st.caption("Consulting Knowledge Base | Local + Drive")
+# ======================================================
+# EXTERNAL BRAIN HELPERS
+# ======================================================
+def relevance_score(text, keys):
+    return sum(2 for k in keys if k.lower() in text.lower())
 
-folder_path = st.text_input(
-    "📁 Enter folder path to scan",
-    value=r"D:\IIM Ranchi Sem 5\VLP Faber Infinite Consulting\Week 2 Updates"
-)
+def curated_benchmarks(industry, tool):
+    return [
+        {
+            "title": f"{industry} Ops Excellence Program",
+            "summary": "Industry programs typically deliver 20–30% cost reduction.",
+            "savings": "₹25–50 Cr",
+            "verified": False,
+            "link": ""
+        },
+        {
+            "title": f"{tool} Deployment – Global Case",
+            "summary": "Framework-led transformations improve throughput by 25–40%.",
+            "savings": "₹15–30 Cr",
+            "verified": False,
+            "link": ""
+        }
+    ]
 
-# =================================================
-# BUILD KNOWLEDGE BASE
-# =================================================
-file_cards = []
-if folder_path and os.path.exists(folder_path):
-    raw_files = scan_folder(folder_path)
+# ======================================================
+# HEADER
+# ======================================================
+st.title("🚀 FABER NEXUS")
+st.caption("End-to-End Consulting Knowledge & Intelligence OS")
+st.divider()
 
-    for f in raw_files:
+# ======================================================
+# SIDEBAR
+# ======================================================
+with st.sidebar:
+    industry = st.selectbox("Industry", INDUSTRIES)
+    tool = st.selectbox("Framework", TOOLS)
+    region = st.selectbox("Region", REGIONS)
+    search_mode = st.radio("External Brain Mode", ["Curated (Guaranteed)", "Live (Best Effort)"])
+    folder_path = st.text_input(
+        "📁 Local Folder Path",
+        value=r"D:\IIM Ranchi Sem 5\VLP Faber Infinite Consulting\Week 2 Updates"
+    )
+
+# ======================================================
+# BUILD INTERNAL BRAIN DATASET
+# ======================================================
+FILE_CARDS = []
+if os.path.exists(folder_path):
+    for f in scan_folder(folder_path):
         text = extract_text(f)
         summary, tags = ai_summary_and_tags(text)
-
-        file_cards.append({
+        FILE_CARDS.append({
             "type": "file",
             "title": f["title"],
             "summary": summary,
-            "tags": tags,
+            "industry": "Internal",
+            "tool": ", ".join(tags),
             "date": f["date"],
+            "impact": "Document",
+            "savings": "—",
             "path": f["path"],
-            "extension": f["extension"]
+            "ext": f["ext"]
         })
 
-# Merge + sort
-ALL_ITEMS = INTERNAL_PROJECTS + file_cards
-ALL_ITEMS.sort(key=lambda x: x["date"], reverse=True)
+ALL_INTERNAL = sorted(
+    INTERNAL_CASES + FILE_CARDS,
+    key=lambda x: x["date"],
+    reverse=True
+)
 
-# =================================================
-# DISPLAY CARDS
-# =================================================
-st.subheader("📚 Internal Brain (Cases + Documents)")
+# ======================================================
+# TABS
+# ======================================================
+tab1, tab2, tab3 = st.tabs([
+    "🧠 Internal Brain",
+    "🌍 External Brain",
+    "💰 ROI Simulator"
+])
 
-cols = st.columns(3)
+# ======================================================
+# TAB 1 — INTERNAL BRAIN
+# ======================================================
+with tab1:
+    st.subheader("📂 Internal Brain – Cases & Documents")
 
-for i, item in enumerate(ALL_ITEMS):
-    with cols[i % 3]:
-        with st.container(border=True):
-            st.markdown(f"### {item['title']}")
-            st.caption(item["date"].strftime("%d %b %Y"))
+    f1, f2 = st.columns(2)
+    ind_f = f1.selectbox("Filter by Industry", ["All"] + INDUSTRIES)
+    tool_f = f2.selectbox("Filter by Tool", ["All"] + TOOLS)
 
-            st.write(item["summary"])
+    filtered = [
+        c for c in ALL_INTERNAL
+        if (ind_f == "All" or c["industry"] == ind_f or c["industry"] == "Internal")
+        and (tool_f == "All" or tool_f in c["tool"])
+    ]
 
-            if item["type"] == "file":
-                st.caption("Tags: " + ", ".join(item["tags"]))
+    cols = st.columns(3)
+    for i, c in enumerate(filtered):
+        with cols[i % 3]:
+            with st.container(border=True):
+                st.markdown(f"### {c['title']}")
+                st.caption(c["date"].strftime("%d %b %Y"))
+                st.write(c["summary"])
+                st.divider()
+                st.markdown(f"**Impact:** {c['impact']}")
+                st.markdown(f"**Savings:** {c['savings']}")
+                st.caption(f"{c['industry']} • {c['tool']}")
 
-                # ---- FILE ACTIONS ----
-                c1, c2 = st.columns(2)
+                if c["type"] == "file":
+                    if st.button("📂 Open File", key=c["path"]):
+                        os.startfile(c["path"])
 
-                with c1:
-                    if st.button("📂 Open File", key=item["path"]):
-                        os.startfile(item["path"])
+# ======================================================
+# TAB 2 — EXTERNAL BRAIN
+# ======================================================
+with tab2:
+    st.subheader("🌍 External Market Intelligence")
 
-                with c2:
-                    if item["extension"] == ".pdf":
-                        st.download_button(
-                            "👁 Preview PDF",
-                            open(item["path"], "rb"),
-                            file_name=item["title"]
-                        )
+    query = st.text_input(
+        "Search",
+        f"{industry} {tool} case study {region}"
+    )
 
-            else:
-                st.caption(item["source"])
+    if st.button("Run Search"):
+        st.session_state.ext = curated_benchmarks(industry, tool)
+
+    if "ext" in st.session_state:
+        cols = st.columns(3)
+        for i, r in enumerate(st.session_state.ext):
+            with cols[i % 3]:
+                with st.container(border=True):
+                    badge = "verified" if r["verified"] else "indicative"
+                    st.markdown(
+                        f"<span class='badge {badge}'>{'Verified' if r['verified'] else 'Indicative'}</span>",
+                        unsafe_allow_html=True
+                    )
+                    st.markdown(f"### {r['title']}")
+                    st.write(r["summary"])
+                    st.divider()
+                    st.markdown(f"💰 {r['savings']}")
+
+# ======================================================
+# TAB 3 — ROI SIMULATOR
+# ======================================================
+with tab3:
+    st.subheader("💰 ROI Simulator")
+
+    revenue = st.number_input("Client Revenue (₹ Cr)", 100)
+    ineff = st.slider("Inefficiency (%)", 5, 30, 15)
+    fee = st.number_input("Consulting Fee (₹ Lakhs)", 25)
+
+    savings = revenue * ineff / 100
+    roi = (savings * 100 / fee) if fee > 0 else 0
+
+    df = pd.DataFrame({
+        "Category": ["Consulting Fee", "Projected Savings"],
+        "₹ Crores": [fee / 100, savings]
+    })
+
+    fig = px.bar(df, x="Category", y="₹ Crores", text_auto=True)
+    st.plotly_chart(fig, use_container_width=True)
+    st.success(f"Projected ROI: {roi:.1f}x")
+
+st.divider()
+st.caption("Faber Infinite Consulting | Integrated Knowledge OS")
