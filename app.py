@@ -227,4 +227,61 @@ with tab1:
 # TAB 2 — EXTERNAL BRAIN
 # ======================================================
 with tab2:
-    st.subheader("🌍 External Mar
+    st.subheader("🌍 External Market Intelligence")
+
+    query = st.text_input(
+        "Search",
+        f"{industry} {tool} case study {region}"
+    )
+
+    if st.button("Run Search"):
+        keywords = [industry, tool, region]
+        if mode.startswith("Live"):
+            results = live_open_search(query, keywords)
+            if not results:
+                st.warning("Live search unavailable. Showing curated benchmarks.")
+                results = curated_benchmarks(industry, tool)
+        else:
+            results = curated_benchmarks(industry, tool)
+
+        st.session_state.ext = results
+
+    if "ext" in st.session_state:
+        cols = st.columns(3)
+        for i, r in enumerate(st.session_state.ext):
+            with cols[i % 3]:
+                with st.container(border=True):
+                    badge = "verified" if r["verified"] else "indicative"
+                    st.markdown(
+                        f"<span class='badge {badge}'>{'Verified' if r['verified'] else 'Indicative'}</span>",
+                        unsafe_allow_html=True
+                    )
+                    st.markdown(f"### {r['title']}")
+                    st.write(r["summary"])
+                    st.divider()
+                    st.markdown(f"💰 {r['savings']}")
+                    if r["link"]:
+                        st.markdown(
+                            f"<a href='{r['link']}' target='_blank'>🔗 View Source</a>",
+                            unsafe_allow_html=True
+                        )
+                    else:
+                        st.caption("Curated internal benchmark")
+
+# ======================================================
+# TAB 3 — ROI SIMULATOR
+# ======================================================
+with tab3:
+    st.subheader("💰 ROI Simulator")
+
+    revenue = st.number_input("Revenue (₹ Cr)", 100)
+    ineff = st.slider("Inefficiency (%)", 5, 30, 15)
+    fee = st.number_input("Consulting Fee (₹ Lakhs)", 25)
+
+    savings = revenue * ineff / 100
+    roi = (savings * 100 / fee) if fee > 0 else 0
+
+    st.success(f"Projected ROI: {roi:.1f}x")
+
+st.divider()
+st.caption("Faber Infinite Consulting | Stable Internal Build")
