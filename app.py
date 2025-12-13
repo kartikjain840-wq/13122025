@@ -5,9 +5,9 @@ import re
 import unicodedata
 from duckduckgo_search import DDGS
 
-# ------------------------------------------------------
-# PAGE CONFIGURATION
-# ------------------------------------------------------
+# ======================================================
+# PAGE CONFIG
+# ======================================================
 st.set_page_config(
     page_title="Faber Nexus | AI Consultant Copilot",
     page_icon="🚀",
@@ -15,96 +15,63 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ------------------------------------------------------
-# GLOBAL CSS STYLING
-# ------------------------------------------------------
+# ======================================================
+# CSS
+# ======================================================
 st.markdown("""
 <style>
 .stApp { background-color: #f8fafc; }
-h1, h2, h3 { color: #1e3a5f; font-family: 'Helvetica Neue', sans-serif; }
+h1, h2, h3 { color: #1e3a5f; }
 .stButton>button {
     background-color: #208C8D;
     color: white;
     border-radius: 8px;
     border: none;
     font-weight: 600;
-    padding: 0.5rem 1rem;
 }
-.stButton>button:hover { background-color: #1D7480; }
 section[data-testid="stSidebar"] { background-color: #1e3a5f; color: white; }
 section[data-testid="stSidebar"] label { color: white !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# ------------------------------------------------------
-# UTILITY
-# ------------------------------------------------------
+# ======================================================
+# UTILITIES
+# ======================================================
 def sanitize_filename(name):
     cleaned = re.sub(r'[<>:"/\\\\|?*]', '', name)
     return unicodedata.normalize("NFKD", cleaned)
 
-# ------------------------------------------------------
-# SAFE GLOBAL SEARCH (₹ AWARE)
-# ------------------------------------------------------
 def safe_global_search(query, num_results=4):
     results = []
-    enhanced_query = f"{query} case study operational excellence ROI"
-
     try:
         with DDGS() as ddgs:
-            raw_results = ddgs.text(enhanced_query, max_results=num_results)
-
-            for res in raw_results:
-                snippet = res.get("body", "") or ""
-                title = res.get("title", "Case Study")
-                link = res.get("href", "#")
-
-                # INR-aware regex
+            for res in ddgs.text(query, max_results=num_results):
+                snippet = res.get("body", "")
                 match = re.search(
                     r'(₹\d+(?:\.\d+)?(?:\s?(?:cr|crore|lakh|lakhs))?|\d+(?:\.\d+)?%)',
                     snippet,
                     re.IGNORECASE
                 )
-                savings = match.group(0) if match else "See Report"
-
-                text = snippet.lower()
-                if "reduce" in text:
-                    impact = "Cost Reduction"
-                elif "increase" in text:
-                    impact = "Revenue Growth"
-                elif "faster" in text:
-                    impact = "Throughput / Speed"
-                else:
-                    impact = "Operational Improvement"
-
                 results.append({
-                    "title": title,
+                    "title": res.get("title", "Case Study"),
                     "summary": snippet,
-                    "link": link,
-                    "savings": savings,
-                    "impact": impact
+                    "link": res.get("href", "#"),
+                    "savings": match.group(0) if match else "See Report",
+                    "impact": "Operational Improvement"
                 })
-
     except Exception:
         return [{
             "title": "Offline Benchmark",
-            "summary": "Live search unavailable. Showing fallback data.",
+            "summary": "Live search unavailable.",
             "link": "#",
             "savings": "N/A",
             "impact": "Unavailable"
         }]
+    return results
 
-    return results if results else [{
-        "title": "No Results Found",
-        "summary": "No usable data returned.",
-        "link": "#",
-        "savings": "N/A",
-        "impact": "N/A"
-    }]
-
-# ------------------------------------------------------
+# ======================================================
 # HEADER
-# ------------------------------------------------------
+# ======================================================
 col1, col2 = st.columns([1, 6])
 with col1:
     st.markdown("## 🟦 **FABER**")
@@ -112,150 +79,228 @@ with col2:
     st.title("NEXUS")
     st.caption("AI-Driven Operations Intelligence Platform | Internal Pre-Sales Tool")
 
-st.markdown("---")
+st.divider()
 
-# ------------------------------------------------------
-# SIDEBAR FILTERS
-# ------------------------------------------------------
+# ======================================================
+# SIDEBAR
+# ======================================================
 with st.sidebar:
     st.header("🎯 Project Scoping")
 
-    industry = st.selectbox(
+    industry_sb = st.selectbox(
         "Select Client Industry:",
-        ["Automotive", "Pharmaceuticals", "FMCG / CPG",
-         "Heavy Engineering", "Textiles", "Logistics"]
+        ["Automotive", "Pharmaceuticals", "FMCG / CPG", "Healthcare", "Retail"]
     )
 
-    tool = st.selectbox(
+    tool_sb = st.selectbox(
         "Select Diagnostic Framework:",
-        ["Value Stream Mapping (VSM)", "5S & Workplace Org",
-         "Hoshin Kanri", "Total Productive Maintenance (TPM)",
-         "Six Sigma", "Lean"]
+        ["VSM", "5S", "TPM", "Lean", "Six Sigma", "Kanban"]
     )
 
-    region = st.selectbox(
+    region_sb = st.selectbox(
         "Select Region:",
-        [
-            "India",
-            "United States",
-            "United Kingdom",
-            "Germany",
-            "France",
-            "UAE",
-            "Singapore",
-            "Australia",
-            "South Africa"
-        ]
+        ["India", "USA", "UK", "Germany", "France", "UAE", "Singapore", "Australia"]
     )
 
-    budget = st.select_slider(
-        "💰 Client Budget Constraint:",
+    budget_sb = st.select_slider(
+        "💰 Client Budget:",
         ["<₹10 Cr", "₹10–50 Cr", "₹50–100 Cr", "₹100 Cr+"]
     )
 
-    st.markdown("---")
+    st.divider()
     st.success("Internal Archive: Online")
     st.success("Global Search: Ready")
 
-# ------------------------------------------------------
+# ======================================================
 # TABS
-# ------------------------------------------------------
+# ======================================================
 tab1, tab2, tab3 = st.tabs([
     "🧠 Internal Brain (Archives)",
     "🌍 External Brain (Live Search)",
     "💰 ROI Simulator"
 ])
 
-# ------------------------------------------------------
-# TAB 1: INTERNAL ARCHIVE
-# ------------------------------------------------------
+# ======================================================
+# TAB 1 — INTERNAL BRAIN (FILTERS + CLICKABLE CARDS)
+# ======================================================
 with tab1:
-    st.subheader(f"📂 Faber Archives: {industry}")
+    st.subheader("📂 Faber Archives – Delivered Impact")
 
-    archive = {
-        "Automotive": [
-            {"Client": "[AUTO_OEM]", "Project": "Assembly Line VSM",
-             "Year": 2023, "ROI": "4.5x", "Team": "4 Consultants",
-             "Result": "22% Cost Reduction"},
-            {"Client": "[TIER1]", "Project": "Shop Floor 5S",
-             "Year": 2022, "ROI": "3.2x", "Team": "3 Consultants",
-             "Result": "Zero Accidents | 12 Months"}
-        ],
-        "Pharmaceuticals": [
-            {"Client": "[PHARMA_GIANT]", "Project": "Batch Cycle Optimization",
-             "Year": 2023, "ROI": "5.0x", "Team": "5 Consultants",
-             "Result": "15% Capacity Release"}
+    projects = [
+        {
+            "id": 1,
+            "company": "Maruti Suzuki",
+            "location": "India",
+            "date": "2025-10-15",
+            "summary": "Value stream mapping across assembly lines reduced waste by 28%.",
+            "savings": "₹45 Cr",
+            "savings_pct": "22%",
+            "impact": "35%",
+            "impact_label": "Time Reduced",
+            "industry": "Automotive",
+            "tool": "VSM",
+            "duration": "4 months",
+            "team": 4,
+            "roles": ["Engagement Lead", "Process Expert", "Data Analyst", "Change Manager"],
+            "extra": "Throughput increased by 42%"
+        },
+        {
+            "id": 2,
+            "company": "Apollo Hospitals",
+            "location": "India",
+            "date": "2025-09-20",
+            "summary": "5S rollout across 12 OTs improved turnaround time.",
+            "savings": "₹12 Cr",
+            "savings_pct": "18%",
+            "impact": "27%",
+            "impact_label": "Time Reduced",
+            "industry": "Healthcare",
+            "tool": "5S",
+            "duration": "2.5 months",
+            "team": 3,
+            "roles": ["Lean Consultant", "Healthcare Ops Expert", "Quality Lead"],
+            "extra": "OT utilization up 33%"
+        },
+        {
+            "id": 3,
+            "company": "Reliance Retail",
+            "location": "India",
+            "date": "2025-08-10",
+            "summary": "Kanban-based visual management reduced store stockouts.",
+            "savings": "₹28 Cr",
+            "savings_pct": "25%",
+            "impact": "40%",
+            "impact_label": "Time Reduced",
+            "industry": "Retail",
+            "tool": "Kanban",
+            "duration": "3 months",
+            "team": 3,
+            "roles": ["Retail Ops Lead", "Supply Chain Analyst", "Implementation Lead"],
+            "extra": "Sales increased by 19%"
+        }
+    ]
+
+    if "selected_project" not in st.session_state:
+        st.session_state.selected_project = None
+
+    # ---------- DETAIL VIEW ----------
+    if st.session_state.selected_project:
+        p = st.session_state.selected_project
+        if st.button("⬅ Back to Projects"):
+            st.session_state.selected_project = None
+            st.experimental_rerun()
+
+        st.markdown(f"## {p['company']} — {p['location']}")
+        st.caption(f"Date: {p['date']}")
+
+        st.write(p["summary"])
+
+        c1, c2 = st.columns(2)
+        with c1:
+            st.metric("Cost Savings", p["savings"], p["savings_pct"])
+        with c2:
+            st.metric(p["impact_label"], p["impact"])
+
+        st.divider()
+        st.write(f"**Industry:** {p['industry']}")
+        st.write(f"**Tool:** {p['tool']}")
+        st.write(f"**Duration:** {p['duration']}")
+        st.write(f"**Team Size:** {p['team']}")
+
+        st.markdown("### Team Roles")
+        for r in p["roles"]:
+            st.write(f"- {r}")
+
+        st.info(f"📈 {p['extra']}")
+
+    # ---------- CARD VIEW ----------
+    else:
+        f1, f2 = st.columns(2)
+        industry_filter = f1.selectbox(
+            "Filter by Industry",
+            ["All"] + sorted(set(p["industry"] for p in projects))
+        )
+        tool_filter = f2.selectbox(
+            "Filter by Tool",
+            ["All"] + sorted(set(p["tool"] for p in projects))
+        )
+
+        filtered = [
+            p for p in projects
+            if (industry_filter == "All" or p["industry"] == industry_filter)
+            and (tool_filter == "All" or p["tool"] == tool_filter)
         ]
-    }
 
-    for p in archive.get(industry, []):
-        with st.expander(f"📄 {p['Project']} ({p['Year']}) | ROI {p['ROI']}"):
-            c1, c2 = st.columns([3, 1])
-            with c1:
-                st.write(f"**Client:** `{p['Client']}`")
-                st.write(f"**Outcome:** {p['Result']}")
-                st.info(f"Team Size: {p['Team']}")
-            with c2:
-                st.metric("ROI Multiplier", float(p["ROI"].replace("x", "")))
+        cols = st.columns(3)
+        for i, p in enumerate(filtered):
+            with cols[i % 3]:
+                with st.container(border=True):
+                    st.markdown(f"### {p['company']}")
+                    st.caption(f"{p['location']} • {p['date']}")
+                    st.write(p["summary"])
+                    st.divider()
 
-            st.download_button(
-                "📥 Download Deck",
-                data="PDF Placeholder",
-                file_name=f"{sanitize_filename(p['Project'])}.pdf"
-            )
+                    a, b = st.columns(2)
+                    a.markdown(f"### {p['savings']}")
+                    a.caption("Cost Savings")
+                    b.markdown(f"### {p['impact']}")
+                    b.caption(p["impact_label"])
 
-# ------------------------------------------------------
-# TAB 2: LIVE SEARCH
-# ------------------------------------------------------
+                    st.caption(f"{p['industry']} • {p['tool']}")
+                    st.caption(f"⏱ {p['duration']} | 👥 {p['team']} members")
+
+                    if st.button("View Details", key=p["id"]):
+                        st.session_state.selected_project = p
+                        st.experimental_rerun()
+
+# ======================================================
+# TAB 2 — EXTERNAL BRAIN
+# ======================================================
 with tab2:
-    st.subheader("🌍 Live Market Intelligence")
+    st.subheader("🌍 Global Benchmark Intelligence")
 
-    default_query = f"{industry} {tool} case study {region}"
-    user_query = st.text_input("Search Global Benchmarks:", value=default_query)
+    query = st.text_input(
+        "Search:",
+        f"{industry_sb} {tool_sb} case study {region_sb}"
+    )
 
-    if st.button("🔍 Run Live Search"):
-        with st.spinner("Scanning global benchmarks..."):
-            st.session_state["search_results"] = safe_global_search(user_query)
+    if st.button("Run Search"):
+        st.session_state.results = safe_global_search(query)
 
-    if "search_results" in st.session_state:
-        for r in st.session_state["search_results"]:
+    if "results" in st.session_state:
+        for r in st.session_state.results:
             st.markdown(f"### [{r['title']}]({r['link']})")
-            st.caption(f"Impact: {r['impact']}")
-            colA, colB = st.columns([3, 1])
-            with colA:
-                st.write(r["summary"])
-            with colB:
-                st.write("**Reported Savings**")
-                st.write(f"💰 {r['savings']}")
-            st.markdown("---")
+            st.write(r["summary"])
+            st.write(f"💰 {r['savings']}")
+            st.divider()
 
-# ------------------------------------------------------
-# TAB 3: ROI SIMULATOR
-# ------------------------------------------------------
+# ======================================================
+# TAB 3 — ROI SIMULATOR
+# ======================================================
 with tab3:
-    st.subheader("💰 Pre-Sales Value Estimator")
+    st.subheader("💰 ROI Simulator")
 
     c1, c2 = st.columns([1, 2])
     with c1:
-        revenue = st.number_input("Client Revenue (₹ Crores)", value=100)
-        ineff = st.slider("Inefficiency Gap (%)", 5, 30, 15)
-        fee = st.number_input("Consulting Fee (₹ Lakhs)", value=25)
+        revenue = st.number_input("Client Revenue (₹ Cr)", 100)
+        ineff = st.slider("Inefficiency (%)", 5, 30, 15)
+        fee = st.number_input("Consulting Fee (₹ Lakhs)", 25)
 
     with c2:
         savings = revenue * ineff / 100
         roi = (savings * 100 / fee) if fee > 0 else 0
 
         df = pd.DataFrame({
-            "Category": ["Consulting Investment", "Projected Savings"],
-            "Amount (₹ Cr)": [fee / 100, savings]
+            "Category": ["Consulting Fee", "Projected Savings"],
+            "₹ Crores": [fee / 100, savings]
         })
 
-        fig = px.bar(df, x="Category", y="Amount (₹ Cr)", text_auto=True)
+        fig = px.bar(df, x="Category", y="₹ Crores", text_auto=True)
         st.plotly_chart(fig, use_container_width=True)
-        st.success(f"Projected ROI: **{roi:.1f}x**")
+        st.success(f"Projected ROI: {roi:.1f}x")
 
-# ------------------------------------------------------
+# ======================================================
 # FOOTER
-# ------------------------------------------------------
-st.markdown("---")
-st.caption("Faber Infinite Consulting | Internal Tool v2.1")
+# ======================================================
+st.divider()
+st.caption("Faber Infinite Consulting | Internal Tool v3.0")
