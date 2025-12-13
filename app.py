@@ -147,4 +147,138 @@ with st.sidebar:
     st.success("Internal Archive: Online")
     st.success("Open-Source Search: Active")
 
-# ========================
+# ======================================================
+# TABS
+# ======================================================
+tab1, tab2, tab3 = st.tabs([
+    "🧠 Internal Brain",
+    "🌍 External Brain",
+    "💰 ROI Simulator"
+])
+
+# ======================================================
+# TAB 1 — INTERNAL BRAIN
+# ======================================================
+with tab1:
+    st.subheader("📂 Faber Archives – Delivered Impact")
+
+    projects = [
+        {
+            "id": 1,
+            "company": "Maruti Suzuki",
+            "location": "India",
+            "summary": "VSM across assembly lines reduced waste by 28%.",
+            "savings": "₹45 Cr",
+            "impact": "35%",
+            "industry": "Automotive",
+            "tool": "VSM",
+            "duration": "4 months",
+            "team": 4,
+            "roles": ["Engagement Lead", "Process Expert", "Analyst", "Change Manager"]
+        },
+        {
+            "id": 2,
+            "company": "Apollo Hospitals",
+            "location": "India",
+            "summary": "5S rollout improved OT turnaround time significantly.",
+            "savings": "₹12 Cr",
+            "impact": "27%",
+            "industry": "Healthcare",
+            "tool": "5S",
+            "duration": "2.5 months",
+            "team": 3,
+            "roles": ["Lean Consultant", "Ops Expert", "Quality Lead"]
+        }
+    ]
+
+    f1, f2 = st.columns(2)
+    ind_filter = f1.selectbox("Filter by Industry", ["All"] + sorted(set(p["industry"] for p in projects)))
+    tool_filter = f2.selectbox("Filter by Tool", ["All"] + sorted(set(p["tool"] for p in projects)))
+
+    filtered = [
+        p for p in projects
+        if (ind_filter == "All" or p["industry"] == ind_filter)
+        and (tool_filter == "All" or p["tool"] == tool_filter)
+    ]
+
+    cols = st.columns(3)
+    for i, p in enumerate(filtered):
+        with cols[i % 3]:
+            with st.container(border=True):
+                st.markdown(f"### {p['company']}")
+                st.caption(p["location"])
+                st.write(p["summary"])
+                st.divider()
+                st.markdown(f"### 💰 {p['savings']}")
+                st.caption(f"Impact: {p['impact']}")
+                st.caption(f"{p['industry']} • {p['tool']}")
+                st.caption(f"⏱ {p['duration']} | 👥 {p['team']} members")
+
+# ======================================================
+# TAB 2 — EXTERNAL BRAIN (OPEN SOURCE + RANKED CARDS)
+# ======================================================
+with tab2:
+    st.subheader("🌍 External Brain – Open-Source Intelligence")
+
+    query = st.text_input(
+        "Search benchmarks",
+        f"{industry_sb} {tool_sb} case study {region_sb} operational excellence"
+    )
+
+    if st.button("🔍 Run Search"):
+        keywords = [industry_sb, tool_sb, region_sb, "cost", "time", "efficiency"]
+        st.session_state.ext_results = open_source_search(query, keywords)
+
+    if "ext_results" in st.session_state:
+        results = st.session_state.ext_results
+
+        if not results:
+            st.warning("No results found. Try refining keywords.")
+        else:
+            cols = st.columns(3)
+            for i, r in enumerate(results):
+                with cols[i % 3]:
+                    with st.container(border=True):
+                        badge = (
+                            "<span class='badge verified'>Verified</span>"
+                            if r["verified"]
+                            else "<span class='badge indicative'>Indicative</span>"
+                        )
+                        st.markdown(badge, unsafe_allow_html=True)
+                        st.markdown(f"### {r['title']}")
+                        st.write(r["summary"])
+                        st.divider()
+                        st.markdown(f"### 💰 {r['savings']}")
+                        st.caption(f"Relevance Score: {r['score']}")
+                        st.markdown(f"[🔗 View Source]({r['link']})")
+
+# ======================================================
+# TAB 3 — ROI SIMULATOR
+# ======================================================
+with tab3:
+    st.subheader("💰 ROI Simulator")
+
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        revenue = st.number_input("Client Revenue (₹ Cr)", 100)
+        ineff = st.slider("Inefficiency (%)", 5, 30, 15)
+        fee = st.number_input("Consulting Fee (₹ Lakhs)", 25)
+
+    with c2:
+        savings = revenue * ineff / 100
+        roi = (savings * 100 / fee) if fee > 0 else 0
+
+        df = pd.DataFrame({
+            "Category": ["Consulting Fee", "Projected Savings"],
+            "₹ Crores": [fee / 100, savings]
+        })
+
+        fig = px.bar(df, x="Category", y="₹ Crores", text_auto=True)
+        st.plotly_chart(fig, use_container_width=True)
+        st.success(f"Projected ROI: {roi:.1f}x")
+
+# ======================================================
+# FOOTER
+# ======================================================
+st.divider()
+st.caption("Faber Infinite Consulting | Internal Tool v4.0")
