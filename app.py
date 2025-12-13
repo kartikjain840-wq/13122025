@@ -32,6 +32,7 @@ h1, h2, h3 { color: #1e3a5f; }
     border-radius: 12px;
     font-size: 12px;
     font-weight: 600;
+    display: inline-block;
 }
 .verified { background-color: #e6f9ee; color: #067647; }
 .indicative { background-color: #fff4e5; color: #92400e; }
@@ -39,41 +40,75 @@ h1, h2, h3 { color: #1e3a5f; }
 """, unsafe_allow_html=True)
 
 # ======================================================
-# INTERNAL BRAIN DATA (FIXED)
+# MASTER LISTS (RESTORED FULLY)
+# ======================================================
+INDUSTRIES = [
+    "Automotive", "Pharmaceuticals", "FMCG / CPG", "Heavy Engineering",
+    "Textiles", "Logistics", "Healthcare", "Retail"
+]
+
+TOOLS = [
+    "Value Stream Mapping (VSM)",
+    "5S & Workplace Org",
+    "Hoshin Kanri",
+    "Total Productive Maintenance (TPM)",
+    "Six Sigma",
+    "Lean",
+    "Kanban"
+]
+
+REGIONS = [
+    "India", "United States", "United Kingdom", "Germany",
+    "France", "UAE", "Singapore", "Australia", "South Africa"
+]
+
+# ======================================================
+# INTERNAL BRAIN DATA
 # ======================================================
 INTERNAL_PROJECTS = [
     {
         "company": "Maruti Suzuki",
         "location": "India",
-        "summary": "Value Stream Mapping across assembly lines reduced waste by 28%.",
+        "summary": "VSM across assembly lines reduced waste and rework significantly.",
         "savings": "₹45 Cr",
         "impact": "35% Cycle Time Reduction",
         "industry": "Automotive",
-        "tool": "VSM",
+        "tool": "Value Stream Mapping (VSM)",
         "duration": "4 months",
         "team": "4 members (Engagement Lead, Ops Expert, Analyst, Change Manager)"
     },
     {
-        "company": "Apollo Hospitals",
+        "company": "Dr. Reddy’s Laboratories",
         "location": "India",
-        "summary": "5S implementation across 12 OTs improved turnaround time.",
-        "savings": "₹12 Cr",
-        "impact": "27% OT Utilization Increase",
-        "industry": "Healthcare",
-        "tool": "5S",
-        "duration": "2.5 months",
-        "team": "3 members (Lean Consultant, Ops Lead, Quality)"
+        "summary": "TPM rollout improved OEE and reduced breakdown losses.",
+        "savings": "₹22 Cr",
+        "impact": "18% OEE Improvement",
+        "industry": "Pharmaceuticals",
+        "tool": "Total Productive Maintenance (TPM)",
+        "duration": "5 months",
+        "team": "5 members (TPM Lead, Maintenance Expert, Data Analyst)"
     },
     {
         "company": "Reliance Retail",
         "location": "India",
-        "summary": "Kanban-based replenishment reduced store stockouts.",
+        "summary": "Kanban-based replenishment reduced stockouts across stores.",
         "savings": "₹28 Cr",
         "impact": "40% Stockout Reduction",
         "industry": "Retail",
         "tool": "Kanban",
         "duration": "3 months",
         "team": "3 members (Retail Ops, SCM Analyst, PM)"
+    },
+    {
+        "company": "Apollo Hospitals",
+        "location": "India",
+        "summary": "5S deployment across OTs improved turnaround time.",
+        "savings": "₹12 Cr",
+        "impact": "27% OT Utilization Increase",
+        "industry": "Healthcare",
+        "tool": "5S & Workplace Org",
+        "duration": "2.5 months",
+        "team": "3 members (Lean Consultant, Ops Lead, Quality)"
     }
 ]
 
@@ -97,11 +132,7 @@ def live_open_search(query, keywords):
 
     for url in urls:
         try:
-            r = requests.get(
-                url,
-                params={"q": query, "format": "json"},
-                timeout=6
-            )
+            r = requests.get(url, params={"q": query, "format": "json"}, timeout=6)
             data = r.json()
 
             for item in data.get("results", []):
@@ -133,18 +164,18 @@ def live_open_search(query, keywords):
 def curated_benchmarks(industry, tool):
     return [
         {
-            "title": f"{industry} Lean Transformation Program",
-            "summary": "Lean deployment delivered 20–30% cost reduction.",
+            "title": f"{industry} Operations Excellence Program",
+            "summary": "Industry-wide transformation programs typically deliver 20–30% cost reduction.",
             "link": "",
-            "savings": "₹30–50 Cr",
+            "savings": "₹25–50 Cr",
             "verified": False,
             "score": 90
         },
         {
-            "title": f"{tool} Deployment Case",
-            "summary": f"{tool} improved throughput by 25–40%.",
+            "title": f"{tool} Deployment – Global Case",
+            "summary": f"{tool} implementations improve throughput and efficiency by 25–40%.",
             "link": "",
-            "savings": "₹15–25 Cr",
+            "savings": "₹15–30 Cr",
             "verified": False,
             "score": 85
         }
@@ -161,22 +192,10 @@ st.divider()
 # SIDEBAR
 # ======================================================
 with st.sidebar:
-    industry = st.selectbox(
-        "Industry",
-        ["Automotive", "Healthcare", "Retail"]
-    )
-    tool = st.selectbox(
-        "Framework",
-        ["VSM", "5S", "Kanban"]
-    )
-    region = st.selectbox(
-        "Region",
-        ["India", "USA", "Germany"]
-    )
-    mode = st.radio(
-        "External Brain Mode",
-        ["Live (Open Source)", "Curated (Guaranteed)"]
-    )
+    industry = st.selectbox("Industry", INDUSTRIES)
+    tool = st.selectbox("Framework", TOOLS)
+    region = st.selectbox("Region", REGIONS)
+    mode = st.radio("External Brain Mode", ["Live (Open Source)", "Curated (Guaranteed)"])
 
 # ======================================================
 # TABS
@@ -188,20 +207,14 @@ tab1, tab2, tab3 = st.tabs([
 ])
 
 # ======================================================
-# TAB 1 — INTERNAL BRAIN (FIXED + ALWAYS VISIBLE)
+# TAB 1 — INTERNAL BRAIN
 # ======================================================
 with tab1:
     st.subheader("📂 Internal Case Archives")
 
     f1, f2 = st.columns(2)
-    ind_filter = f1.selectbox(
-        "Filter by Industry",
-        ["All"] + sorted({p["industry"] for p in INTERNAL_PROJECTS})
-    )
-    tool_filter = f2.selectbox(
-        "Filter by Tool",
-        ["All"] + sorted({p["tool"] for p in INTERNAL_PROJECTS})
-    )
+    ind_filter = f1.selectbox("Filter by Industry", ["All"] + INDUSTRIES)
+    tool_filter = f2.selectbox("Filter by Tool", ["All"] + TOOLS)
 
     filtered = [
         p for p in INTERNAL_PROJECTS
@@ -231,7 +244,7 @@ with tab2:
 
     query = st.text_input(
         "Search",
-        f"{industry} {tool} case study {region}"
+        f"{industry} {tool} case study {region} operational excellence"
     )
 
     if st.button("Run Search"):
@@ -266,7 +279,7 @@ with tab2:
                             unsafe_allow_html=True
                         )
                     else:
-                        st.caption("Curated internal benchmark")
+                        st.caption("Curated benchmark (internal reference)")
 
 # ======================================================
 # TAB 3 — ROI SIMULATOR
