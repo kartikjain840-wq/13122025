@@ -1,300 +1,181 @@
 import streamlit as st
-import pandas as pd
-import plotly.express as px
-import requests
-import re
+import os
+from pathlib import Path
+from datetime import datetime
+import fitz  # PyMuPDF
+from pptx import Presentation
+import nltk
+from nltk.tokenize import sent_tokenize
+import webbrowser
 
-# ======================================================
+# ------------------ NLTK SETUP ------------------
+nltk.download("punkt")
+
+# =================================================
 # PAGE CONFIG
-# ======================================================
+# =================================================
 st.set_page_config(
-    page_title="Faber Nexus | AI Consultant Copilot",
-    page_icon="🚀",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title="Faber Nexus | Internal Knowledge OS",
+    page_icon="📂",
+    layout="wide"
 )
 
-# ======================================================
-# CSS
-# ======================================================
-st.markdown("""
-<style>
-.stApp { background-color: #f8fafc; }
-h1, h2, h3 { color: #1e3a5f; }
-.stButton>button {
-    background-color: #208C8D;
-    color: white;
-    border-radius: 8px;
-    font-weight: 600;
-}
-.badge {
-    padding: 4px 10px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 600;
-    display: inline-block;
-}
-.verified { background-color: #e6f9ee; color: #067647; }
-.indicative { background-color: #fff4e5; color: #92400e; }
-</style>
-""", unsafe_allow_html=True)
-
-# ======================================================
-# MASTER LISTS (RESTORED FULLY)
-# ======================================================
-INDUSTRIES = [
-    "Automotive", "Pharmaceuticals", "FMCG / CPG", "Heavy Engineering",
-    "Textiles", "Logistics", "Healthcare", "Retail"
-]
-
-TOOLS = [
-    "Value Stream Mapping (VSM)",
-    "5S & Workplace Org",
-    "Hoshin Kanri",
-    "Total Productive Maintenance (TPM)",
-    "Six Sigma",
-    "Lean",
-    "Kanban"
-]
-
-REGIONS = [
-    "India", "United States", "United Kingdom", "Germany",
-    "France", "UAE", "Singapore", "Australia", "South Africa"
-]
-
-# ======================================================
-# INTERNAL BRAIN DATA
-# ======================================================
+# =================================================
+# INTERNAL STATIC PROJECTS
+# =================================================
 INTERNAL_PROJECTS = [
     {
-        "company": "Maruti Suzuki",
-        "location": "India",
-        "summary": "VSM across assembly lines reduced waste and rework significantly.",
-        "savings": "₹45 Cr",
-        "impact": "35% Cycle Time Reduction",
+        "type": "case",
+        "title": "Maruti Suzuki – VSM Transformation",
+        "summary": "Value stream mapping reduced waste by 28% across assembly lines.",
         "industry": "Automotive",
-        "tool": "Value Stream Mapping (VSM)",
-        "duration": "4 months",
-        "team": "4 members (Engagement Lead, Ops Expert, Analyst, Change Manager)"
+        "tool": "VSM",
+        "date": datetime(2024, 10, 12),
+        "source": "Internal Case"
     },
     {
-        "company": "Dr. Reddy’s Laboratories",
-        "location": "India",
-        "summary": "TPM rollout improved OEE and reduced breakdown losses.",
-        "savings": "₹22 Cr",
-        "impact": "18% OEE Improvement",
-        "industry": "Pharmaceuticals",
-        "tool": "Total Productive Maintenance (TPM)",
-        "duration": "5 months",
-        "team": "5 members (TPM Lead, Maintenance Expert, Data Analyst)"
-    },
-    {
-        "company": "Reliance Retail",
-        "location": "India",
-        "summary": "Kanban-based replenishment reduced stockouts across stores.",
-        "savings": "₹28 Cr",
-        "impact": "40% Stockout Reduction",
-        "industry": "Retail",
-        "tool": "Kanban",
-        "duration": "3 months",
-        "team": "3 members (Retail Ops, SCM Analyst, PM)"
-    },
-    {
-        "company": "Apollo Hospitals",
-        "location": "India",
-        "summary": "5S deployment across OTs improved turnaround time.",
-        "savings": "₹12 Cr",
-        "impact": "27% OT Utilization Increase",
+        "type": "case",
+        "title": "Apollo Hospitals – 5S Rollout",
+        "summary": "5S implementation improved OT turnaround time by 27%.",
         "industry": "Healthcare",
-        "tool": "5S & Workplace Org",
-        "duration": "2.5 months",
-        "team": "3 members (Lean Consultant, Ops Lead, Quality)"
+        "tool": "5S",
+        "date": datetime(2024, 9, 20),
+        "source": "Internal Case"
     }
 ]
 
-# ======================================================
-# UTILITIES
-# ======================================================
-def relevance_score(text, keywords):
-    score = 0
-    text = text.lower()
-    for k in keywords:
-        if k.lower() in text:
-            score += 2
-    return score
+# =================================================
+# FILE SCANNING
+# =================================================
+def scan_folder(folder_path):
+    files = []
+    for root, _, filenames in os.walk(folder_path):
+        for f in filenames:
+            path = os.path.join(root, f)
+            stat = os.stat(path)
+            files.append({
+                "type": "file",
+                "title": f,
+                "path": path,
+                "extension": Path(f).suffix.lower(),
+                "date": datetime.fromtimestamp(stat.st_mtime)
+            })
+    return files
 
-def live_open_search(query, keywords):
-    urls = [
-        "https://search.disroot.org/search",
-        "https://searx.tiekoetter.com/search"
-    ]
-    results = []
+# =================================================
+# FILE CONTENT EXTRACTION
+# =================================================
+def extract_text(file):
+    ext = file["extension"]
+    path = file["path"]
 
-    for url in urls:
-        try:
-            r = requests.get(url, params={"q": query, "format": "json"}, timeout=6)
-            data = r.json()
+    try:
+        if ext == ".pdf":
+            doc = fitz.open(path)
+            return " ".join(page.get_text() for page in doc)[:3000]
 
-            for item in data.get("results", []):
-                snippet = item.get("content", "")
-                title = item.get("title", "Case Study")
-                link = item.get("url", "")
+        if ext in [".ppt", ".pptx"]:
+            prs = Presentation(path)
+            text = ""
+            for slide in prs.slides:
+                for shape in slide.shapes:
+                    if hasattr(shape, "text"):
+                        text += shape.text + " "
+            return text[:3000]
+    except:
+        return ""
 
-                match = re.search(
-                    r'(₹\d+(?:\.\d+)?(?:\s?(?:cr|crore|lakh|lakhs))?|\d+%)',
-                    snippet
-                )
+    return ""
 
-                results.append({
-                    "title": title,
-                    "summary": snippet[:260] + "...",
-                    "link": link,
-                    "savings": match.group(0) if match else "Indicative",
-                    "verified": bool(match),
-                    "score": relevance_score(snippet, keywords)
-                })
+# =================================================
+# AI-STYLE AUTO SUMMARY + TAGGING (LOCAL)
+# =================================================
+def ai_summary_and_tags(text):
+    if not text:
+        return "No preview available", ["Unclassified"]
 
-            if results:
-                break
-        except Exception:
-            continue
+    sentences = sent_tokenize(text)
+    summary = " ".join(sentences[:2])
 
-    return results
+    tags = []
+    text_l = text.lower()
 
-def curated_benchmarks(industry, tool):
-    return [
-        {
-            "title": f"{industry} Operations Excellence Program",
-            "summary": "Industry-wide transformation programs typically deliver 20–30% cost reduction.",
-            "link": "",
-            "savings": "₹25–50 Cr",
-            "verified": False,
-            "score": 90
-        },
-        {
-            "title": f"{tool} Deployment – Global Case",
-            "summary": f"{tool} implementations improve throughput and efficiency by 25–40%.",
-            "link": "",
-            "savings": "₹15–30 Cr",
-            "verified": False,
-            "score": 85
-        }
-    ]
+    if "vsm" in text_l: tags.append("VSM")
+    if "5s" in text_l: tags.append("5S")
+    if "lean" in text_l: tags.append("Lean")
+    if "tpm" in text_l: tags.append("TPM")
+    if "six sigma" in text_l: tags.append("Six Sigma")
 
-# ======================================================
-# HEADER
-# ======================================================
-st.title("🚀 FABER NEXUS")
-st.caption("AI-Driven Operations Intelligence Platform")
-st.divider()
+    return summary, tags if tags else ["General"]
 
-# ======================================================
-# SIDEBAR
-# ======================================================
-with st.sidebar:
-    industry = st.selectbox("Industry", INDUSTRIES)
-    tool = st.selectbox("Framework", TOOLS)
-    region = st.selectbox("Region", REGIONS)
-    mode = st.radio("External Brain Mode", ["Live (Open Source)", "Curated (Guaranteed)"])
+# =================================================
+# UI — FOLDER INPUT
+# =================================================
+st.title("📂 FABER NEXUS — Internal Knowledge OS")
+st.caption("Consulting Knowledge Base | Local + Drive")
 
-# ======================================================
-# TABS
-# ======================================================
-tab1, tab2, tab3 = st.tabs([
-    "🧠 Internal Brain",
-    "🌍 External Brain",
-    "💰 ROI Simulator"
-])
+folder_path = st.text_input(
+    "📁 Enter folder path to scan",
+    value=r"D:\IIM Ranchi Sem 5\VLP Faber Infinite Consulting\Week 2 Updates"
+)
 
-# ======================================================
-# TAB 1 — INTERNAL BRAIN
-# ======================================================
-with tab1:
-    st.subheader("📂 Internal Case Archives")
+# =================================================
+# BUILD KNOWLEDGE BASE
+# =================================================
+file_cards = []
+if folder_path and os.path.exists(folder_path):
+    raw_files = scan_folder(folder_path)
 
-    f1, f2 = st.columns(2)
-    ind_filter = f1.selectbox("Filter by Industry", ["All"] + INDUSTRIES)
-    tool_filter = f2.selectbox("Filter by Tool", ["All"] + TOOLS)
+    for f in raw_files:
+        text = extract_text(f)
+        summary, tags = ai_summary_and_tags(text)
 
-    filtered = [
-        p for p in INTERNAL_PROJECTS
-        if (ind_filter == "All" or p["industry"] == ind_filter)
-        and (tool_filter == "All" or p["tool"] == tool_filter)
-    ]
+        file_cards.append({
+            "type": "file",
+            "title": f["title"],
+            "summary": summary,
+            "tags": tags,
+            "date": f["date"],
+            "path": f["path"],
+            "extension": f["extension"]
+        })
 
-    cols = st.columns(3)
-    for i, p in enumerate(filtered):
-        with cols[i % 3]:
-            with st.container(border=True):
-                st.markdown(f"### {p['company']}")
-                st.caption(p["location"])
-                st.write(p["summary"])
-                st.divider()
-                st.markdown(f"**Savings:** {p['savings']}")
-                st.write(f"**Impact:** {p['impact']}")
-                st.caption(f"{p['industry']} • {p['tool']}")
-                st.caption(f"⏱ {p['duration']}")
-                st.caption(f"👥 {p['team']}")
+# Merge + sort
+ALL_ITEMS = INTERNAL_PROJECTS + file_cards
+ALL_ITEMS.sort(key=lambda x: x["date"], reverse=True)
 
-# ======================================================
-# TAB 2 — EXTERNAL BRAIN
-# ======================================================
-with tab2:
-    st.subheader("🌍 External Market Intelligence")
+# =================================================
+# DISPLAY CARDS
+# =================================================
+st.subheader("📚 Internal Brain (Cases + Documents)")
 
-    query = st.text_input(
-        "Search",
-        f"{industry} {tool} case study {region} operational excellence"
-    )
+cols = st.columns(3)
 
-    if st.button("Run Search"):
-        keywords = [industry, tool, region]
-        if mode.startswith("Live"):
-            results = live_open_search(query, keywords)
-            if not results:
-                st.warning("Live search unavailable. Showing curated benchmarks.")
-                results = curated_benchmarks(industry, tool)
-        else:
-            results = curated_benchmarks(industry, tool)
+for i, item in enumerate(ALL_ITEMS):
+    with cols[i % 3]:
+        with st.container(border=True):
+            st.markdown(f"### {item['title']}")
+            st.caption(item["date"].strftime("%d %b %Y"))
 
-        st.session_state.ext = results
+            st.write(item["summary"])
 
-    if "ext" in st.session_state:
-        cols = st.columns(3)
-        for i, r in enumerate(st.session_state.ext):
-            with cols[i % 3]:
-                with st.container(border=True):
-                    badge = "verified" if r["verified"] else "indicative"
-                    st.markdown(
-                        f"<span class='badge {badge}'>{'Verified' if r['verified'] else 'Indicative'}</span>",
-                        unsafe_allow_html=True
-                    )
-                    st.markdown(f"### {r['title']}")
-                    st.write(r["summary"])
-                    st.divider()
-                    st.markdown(f"💰 {r['savings']}")
-                    if r["link"]:
-                        st.markdown(
-                            f"<a href='{r['link']}' target='_blank'>🔗 View Source</a>",
-                            unsafe_allow_html=True
+            if item["type"] == "file":
+                st.caption("Tags: " + ", ".join(item["tags"]))
+
+                # ---- FILE ACTIONS ----
+                c1, c2 = st.columns(2)
+
+                with c1:
+                    if st.button("📂 Open File", key=item["path"]):
+                        os.startfile(item["path"])
+
+                with c2:
+                    if item["extension"] == ".pdf":
+                        st.download_button(
+                            "👁 Preview PDF",
+                            open(item["path"], "rb"),
+                            file_name=item["title"]
                         )
-                    else:
-                        st.caption("Curated benchmark (internal reference)")
 
-# ======================================================
-# TAB 3 — ROI SIMULATOR
-# ======================================================
-with tab3:
-    st.subheader("💰 ROI Simulator")
-
-    revenue = st.number_input("Revenue (₹ Cr)", 100)
-    ineff = st.slider("Inefficiency (%)", 5, 30, 15)
-    fee = st.number_input("Consulting Fee (₹ Lakhs)", 25)
-
-    savings = revenue * ineff / 100
-    roi = (savings * 100 / fee) if fee > 0 else 0
-
-    st.success(f"Projected ROI: {roi:.1f}x")
-
-st.divider()
-st.caption("Faber Infinite Consulting | Stable Internal Build")
+            else:
+                st.caption(item["source"])
