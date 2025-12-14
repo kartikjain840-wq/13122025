@@ -10,25 +10,25 @@ from pptx import Presentation
 # PAGE CONFIG
 # ======================================================
 st.set_page_config(
-    page_title="Faber Nexus | Project Intelligence",
+    page_title="Project Intelligence Dashboard",
     page_icon="📂",
     layout="wide"
 )
 
 # ======================================================
-# SIMPLE TEXT HELPERS (CLOUD SAFE)
+# TEXT HELPERS (NO NLTK – CLOUD SAFE)
 # ======================================================
-def simple_sentences(text):
-    return [s.strip() for s in re.split(r"[.!?]\s+", text) if len(s.strip()) > 20]
+def sentences(text):
+    return [s.strip() for s in re.split(r"[.!?]\s+", text) if len(s.strip()) > 25]
 
-def find_first(text, keywords, default):
-    for s in simple_sentences(text):
+def pick_sentence(text, keywords, default):
+    for s in sentences(text):
         if any(k in s.lower() for k in keywords):
             return s
     return default
 
 # ======================================================
-# FILE SCAN + TEXT EXTRACTION
+# FILE SCANNING
 # ======================================================
 def scan_folder(path):
     files = []
@@ -60,22 +60,22 @@ def extract_text(file):
     return ""
 
 # ======================================================
-# PROJECT INTELLIGENCE (RULE BASED)
+# PROJECT ANALYSIS (RULE-BASED, STABLE)
 # ======================================================
 def analyze_project(text):
-    industry = find_first(
+    industry = pick_sentence(
         text,
         ["automotive", "healthcare", "fmcg", "manufacturing", "logistics", "retail"],
-        "Industry not specified"
+        "Industry not explicitly stated"
     )
 
-    objective = find_first(
+    objective = pick_sentence(
         text,
         ["objective", "aim", "goal", "challenge", "problem"],
         "Improve operational performance"
     )
 
-    result = find_first(
+    result = pick_sentence(
         text,
         ["reduc", "improv", "increase", "%", "saving", "impact"],
         "Operational improvements achieved"
@@ -95,45 +95,95 @@ def analyze_project(text):
 # HEADER
 # ======================================================
 st.title("📂 Project Intelligence Dashboard")
-st.caption("Industry | Objectives | Results | Tools | File Reference")
+st.caption("Industry • Objectives • Results • Tools • File Reference")
 st.divider()
 
 # ======================================================
-# GOOGLE DRIVE INPUT
+# INPUT MODE
 # ======================================================
-drive_link = st.text_input(
-    "🔗 Paste Google Drive Folder Link (Viewer access)",
-    help="Right click folder → Get link → Anyone with link → Viewer"
+mode = st.radio(
+    "Choose input method",
+    ["Google Drive Folder (recommended)", "Upload Files"],
+    horizontal=True
 )
 
-if st.button("📥 Load Projects") and drive_link:
-    with st.spinner("Loading files from Google Drive..."):
-        gdown.download_folder(
-            drive_link,
-            output="drive_projects",
-            quiet=True,
-            use_cookies=False
-        )
-    st.success("Projects loaded successfully")
-
-# ======================================================
-# BUILD PROJECT CARDS
-# ======================================================
 PROJECTS = []
-DRIVE_DIR = "drive_projects"
 
-if os.path.exists(DRIVE_DIR):
-    for f in scan_folder(DRIVE_DIR):
-        text = extract_text(f)
+# ======================================================
+# MODE 1 — GOOGLE DRIVE (DEFENSIVE)
+# ======================================================
+if mode == "Google Drive Folder (recommended)":
+    drive_link = st.text_input(
+        "🔗 Google Drive Folder Link",
+        help="Share folder → Anyone with link → Viewer | Only PDF/PPT/PPTX"
+    )
+
+    if st.button("📥 Load Projects from Drive") and drive_link:
+        if "drive.google.com/drive/folders/" not in drive_link:
+            st.error("❌ Please paste a valid Google Drive *FOLDER* link.")
+        else:
+            with st.spinner("Downloading files from Google Drive..."):
+                try:
+                    gdown.download_folder(
+                        drive_link,
+                        output="drive_projects",
+                        quiet=True,
+                        use_cookies=False
+                    )
+                    st.success("Files loaded successfully")
+                except Exception:
+                    st.error("""
+❌ Google Drive blocked the download.
+
+Fix checklist:
+1. Folder access = Anyone with link → Viewer
+2. Folder contains only PDF / PPT / PPTX
+3. No Google Docs / Sheets / Slides
+4. Try again after 1–2 minutes
+""")
+
+    if os.path.exists("drive_projects"):
+        for f in scan_folder("drive_projects"):
+            text = extract_text(f)
+            industry, objective, result, tools = analyze_project(text)
+
+            PROJECTS.append({
+                "name": f["name"],
+                "industry": industry,
+                "objective": objective,
+                "result": result,
+                "tools": tools,
+                "source": "Google Drive"
+            })
+
+# ======================================================
+# MODE 2 — FILE UPLOAD (100% FAIL-PROOF)
+# ======================================================
+if mode == "Upload Files":
+    uploads = st.file_uploader(
+        "Upload PDF / PPT / PPTX files",
+        type=["pdf", "ppt", "pptx"],
+        accept_multiple_files=True
+    )
+
+    os.makedirs("uploads", exist_ok=True)
+
+    for u in uploads:
+        path = os.path.join("uploads", u.name)
+        with open(path, "wb") as f:
+            f.write(u.read())
+
+        fobj = {"path": path, "ext": Path(path).suffix.lower()}
+        text = extract_text(fobj)
         industry, objective, result, tools = analyze_project(text)
 
         PROJECTS.append({
-            "name": f["name"],
+            "name": u.name,
             "industry": industry,
             "objective": objective,
             "result": result,
             "tools": tools,
-            "path": f["path"]
+            "source": "Uploaded"
         })
 
 # ======================================================
@@ -150,10 +200,10 @@ if PROJECTS:
                 st.markdown(f"**Objectives:** {p['objective']}")
                 st.markdown(f"**Results:** {p['result']}")
                 st.markdown(f"**Tool Used:** {p['tools']}")
-                st.caption(f"📄 File reference: `{p['name']}`")
+                st.caption(f"📄 Source: {p['source']}")
 
 else:
-    st.info("Load a Google Drive folder to see projects.")
+    st.info("Load a Google Drive folder or upload files to see projects.")
 
 st.divider()
-st.caption("Faber Infinite Consulting | Project Intelligence System")
+st.caption("Consulting Project Intelligence | Streamlit Cloud Safe")
