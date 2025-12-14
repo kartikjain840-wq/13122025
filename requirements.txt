@@ -1,7 +1,7 @@
 streamlit
 pandas
 plotly
-requests
+gdown
+nltk
 PyMuPDF
 python-pptx
-nltk
