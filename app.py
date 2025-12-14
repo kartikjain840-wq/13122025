@@ -1,16 +1,12 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import os
+import os, re
 from pathlib import Path
 from datetime import datetime
 import gdown
 import fitz  # PyMuPDF
 from pptx import Presentation
-import nltk
-from nltk.tokenize import sent_tokenize
-
-nltk.download("punkt")
 
 # ======================================================
 # PAGE CONFIG
@@ -35,53 +31,30 @@ h1, h2, h3 { color: #1e3a5f; }
     border-radius: 8px;
     font-weight: 600;
 }
-.badge {
-    padding: 4px 10px;
+.kpi {
+    background: white;
+    padding: 16px;
     border-radius: 12px;
-    font-size: 12px;
-    font-weight: 600;
+    text-align: center;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
 }
-.verified { background-color: #e6f9ee; color: #067647; }
-.indicative { background-color: #fff4e5; color: #92400e; }
 </style>
 """, unsafe_allow_html=True)
 
 # ======================================================
 # MASTER LISTS
 # ======================================================
-INDUSTRIES = [
-    "Automotive", "Pharmaceuticals", "FMCG / CPG", "Heavy Engineering",
-    "Textiles", "Logistics", "Healthcare", "Retail"
-]
-
-TOOLS = [
-    "Value Stream Mapping (VSM)", "5S", "Lean", "TPM",
-    "Six Sigma", "Kanban"
-]
-
-REGIONS = [
-    "India", "United States", "United Kingdom", "Germany",
-    "UAE", "Singapore"
-]
+INDUSTRIES = ["Automotive", "Healthcare", "FMCG", "Manufacturing", "Logistics"]
+TOOLS = ["VSM", "5S", "Lean", "TPM", "Six Sigma", "Kanban"]
 
 # ======================================================
-# INTERNAL CASES (SEED DATA)
+# SIMPLE SENTENCE TOKENIZER (CLOUD SAFE)
 # ======================================================
-INTERNAL_CASES = [
-    {
-        "type": "case",
-        "title": "Maruti Suzuki – Assembly VSM",
-        "summary": "VSM reduced waste and rework across assembly lines.",
-        "industry": "Automotive",
-        "tool": "VSM",
-        "date": datetime(2024, 10, 15),
-        "impact": "35% Cycle Time Reduction",
-        "savings": "₹45 Cr"
-    }
-]
+def simple_sent_tokenize(text):
+    return [s.strip() for s in re.split(r'[.!?]\s+', text) if len(s.strip()) > 20]
 
 # ======================================================
-# FILE SCANNING
+# FILE HANDLING
 # ======================================================
 def scan_folder(path):
     files = []
@@ -101,31 +74,53 @@ def extract_text(file):
     try:
         if file["ext"] == ".pdf":
             doc = fitz.open(file["path"])
-            return " ".join(p.get_text() for p in doc)[:3000]
+            return " ".join(p.get_text() for p in doc)[:4000]
         if file["ext"] in [".ppt", ".pptx"]:
             prs = Presentation(file["path"])
             return " ".join(
                 shape.text for slide in prs.slides
                 for shape in slide.shapes if hasattr(shape, "text")
-            )[:3000]
+            )[:4000]
     except:
         return ""
     return ""
 
-def ai_summary_and_tags(text):
+# ======================================================
+# AI-LIKE ANALYSIS (RULE BASED, STABLE)
+# ======================================================
+def analyze_document(text):
     if not text:
-        return "No preview available", ["General"]
+        return {
+            "summary": "No readable content.",
+            "problem": "Information unavailable",
+            "insight": "Document could not be parsed",
+            "impact": "Not quantified",
+            "tools": ["General"]
+        }
 
-    sents = sent_tokenize(text)
-    summary = " ".join(sents[:2])
-    tags = []
+    sents = simple_sent_tokenize(text)
+    summary = " ".join(sents[:2]) if sents else "No preview available"
 
-    t = text.lower()
-    for k in ["vsm", "5s", "lean", "tpm", "six sigma", "kanban"]:
-        if k in t:
-            tags.append(k.upper())
+    problem = next((s for s in sents if any(k in s.lower() for k in
+                ["delay", "ineff", "bottleneck", "waste", "error"])), "Operational inefficiencies identified")
 
-    return summary, tags if tags else ["General"]
+    insight = next((s for s in sents if any(k in s.lower() for k in
+                ["analysis", "identified", "root", "revealed"])), "Process analysis highlighted improvement levers")
+
+    impact = next((s for s in sents if any(k in s.lower() for k in
+                ["reduc", "improv", "%", "increase", "saving"])), "Potential efficiency and cost improvements")
+
+    tools = [t for t in TOOLS if t.lower() in text.lower()]
+    if not tools:
+        tools = ["General"]
+
+    return {
+        "summary": summary,
+        "problem": problem,
+        "insight": insight,
+        "impact": impact,
+        "tools": tools
+    }
 
 # ======================================================
 # HEADER
@@ -135,16 +130,12 @@ st.caption("Consulting Knowledge & Intelligence OS")
 st.divider()
 
 # ======================================================
-# SIDEBAR — GOOGLE DRIVE INPUT
+# SIDEBAR — GOOGLE DRIVE
 # ======================================================
 with st.sidebar:
-    industry = st.selectbox("Industry", INDUSTRIES)
-    tool = st.selectbox("Framework", TOOLS)
-    region = st.selectbox("Region", REGIONS)
-
     drive_link = st.text_input(
         "🔗 Google Drive Folder Link",
-        help="Set access to: Anyone with link → Viewer"
+        help="Set access: Anyone with link → Viewer"
     )
 
     if st.button("📥 Load Internal Brain") and drive_link:
@@ -160,86 +151,75 @@ with st.sidebar:
 # ======================================================
 # BUILD INTERNAL BRAIN
 # ======================================================
-FILE_CARDS = []
+CARDS = []
 DRIVE_DIR = "internal_drive"
 
 if os.path.exists(DRIVE_DIR):
     for f in scan_folder(DRIVE_DIR):
         text = extract_text(f)
-        summary, tags = ai_summary_and_tags(text)
+        analysis = analyze_document(text)
 
-        FILE_CARDS.append({
-            "type": "file",
+        CARDS.append({
             "title": f["title"],
-            "summary": summary,
-            "industry": "Internal",
-            "tool": ", ".join(tags),
             "date": f["date"],
-            "impact": "Document Insight",
-            "savings": "—"
+            "summary": analysis["summary"],
+            "problem": analysis["problem"],
+            "insight": analysis["insight"],
+            "impact": analysis["impact"],
+            "tools": ", ".join(analysis["tools"])
         })
 
-ALL_INTERNAL = sorted(
-    INTERNAL_CASES + FILE_CARDS,
-    key=lambda x: x["date"],
-    reverse=True
-)
+# ======================================================
+# KPI ROLLUPS (ACROSS ALL FILES)
+# ======================================================
+total_files = len(CARDS)
+tool_count = pd.Series(
+    ",".join(c["tools"] for c in CARDS).split(",")
+).value_counts() if CARDS else pd.Series()
 
 # ======================================================
 # TABS
 # ======================================================
-tab1, tab2, tab3 = st.tabs([
-    "🧠 Internal Brain",
-    "🌍 External Brain",
-    "💰 ROI Simulator"
-])
+tab1, tab2 = st.tabs(["🧠 Internal Brain", "📊 Portfolio KPIs"])
 
 # ======================================================
-# TAB 1 — INTERNAL BRAIN
+# TAB 1 — INTERNAL BRAIN CARDS
 # ======================================================
 with tab1:
-    st.subheader("📂 Internal Brain")
+    st.subheader("📂 Internal Brain – Problem | Insight | Impact")
 
     cols = st.columns(3)
-    for i, c in enumerate(ALL_INTERNAL):
+    for i, c in enumerate(CARDS):
         with cols[i % 3]:
             with st.container(border=True):
                 st.markdown(f"### {c['title']}")
                 st.caption(c["date"].strftime("%d %b %Y"))
-                st.write(c["summary"])
+                st.write(f"**Problem:** {c['problem']}")
+                st.write(f"**Insight:** {c['insight']}")
+                st.write(f"**Impact:** {c['impact']}")
                 st.divider()
-                st.markdown(f"**Impact:** {c['impact']}")
-                st.markdown(f"**Savings:** {c['savings']}")
-                st.caption(f"{c['industry']} • {c['tool']}")
+                st.caption(f"Tools: {c['tools']}")
 
 # ======================================================
-# TAB 2 — EXTERNAL BRAIN (CURATED)
+# TAB 2 — KPI ROLLUPS
 # ======================================================
 with tab2:
-    st.subheader("🌍 External Intelligence")
-    st.info("Curated benchmark cases (static demo)")
+    st.subheader("📊 Knowledge Portfolio KPIs")
 
-# ======================================================
-# TAB 3 — ROI SIMULATOR
-# ======================================================
-with tab3:
-    st.subheader("💰 ROI Simulator")
+    k1, k2, k3 = st.columns(3)
+    k1.metric("Total Files Analysed", total_files)
+    k2.metric("Distinct Tools Used", tool_count.count())
+    k3.metric("Most Frequent Tool", tool_count.idxmax() if not tool_count.empty else "—")
 
-    revenue = st.number_input("Client Revenue (₹ Cr)", 100)
-    ineff = st.slider("Inefficiency (%)", 5, 30, 15)
-    fee = st.number_input("Consulting Fee (₹ Lakhs)", 25)
-
-    savings = revenue * ineff / 100
-    roi = (savings * 100 / fee) if fee > 0 else 0
-
-    df = pd.DataFrame({
-        "Category": ["Consulting Fee", "Projected Savings"],
-        "₹ Crores": [fee / 100, savings]
-    })
-
-    fig = px.bar(df, x="Category", y="₹ Crores", text_auto=True)
-    st.plotly_chart(fig, use_container_width=True)
-    st.success(f"Projected ROI: {roi:.1f}x")
+    if not tool_count.empty:
+        fig = px.bar(
+            tool_count.reset_index(),
+            x="index",
+            y=0,
+            labels={"index": "Tool", "0": "Document Count"},
+            title="Tool Usage Across Knowledge Base"
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
 st.divider()
 st.caption("Faber Infinite Consulting | Knowledge OS")
