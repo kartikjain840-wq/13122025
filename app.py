@@ -1,6 +1,4 @@
 import streamlit as st
-import pandas as pd
-import plotly.express as px
 import os, re
 from pathlib import Path
 from datetime import datetime
@@ -12,61 +10,36 @@ from pptx import Presentation
 # PAGE CONFIG
 # ======================================================
 st.set_page_config(
-    page_title="Faber Nexus | Consulting Knowledge OS",
-    page_icon="🚀",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title="Faber Nexus | Project Intelligence",
+    page_icon="📂",
+    layout="wide"
 )
 
 # ======================================================
-# CSS
+# SIMPLE TEXT HELPERS (CLOUD SAFE)
 # ======================================================
-st.markdown("""
-<style>
-.stApp { background-color: #f8fafc; }
-h1, h2, h3 { color: #1e3a5f; }
-.stButton>button {
-    background-color: #208C8D;
-    color: white;
-    border-radius: 8px;
-    font-weight: 600;
-}
-.kpi {
-    background: white;
-    padding: 16px;
-    border-radius: 12px;
-    text-align: center;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-}
-</style>
-""", unsafe_allow_html=True)
+def simple_sentences(text):
+    return [s.strip() for s in re.split(r"[.!?]\s+", text) if len(s.strip()) > 20]
+
+def find_first(text, keywords, default):
+    for s in simple_sentences(text):
+        if any(k in s.lower() for k in keywords):
+            return s
+    return default
 
 # ======================================================
-# MASTER LISTS
-# ======================================================
-INDUSTRIES = ["Automotive", "Healthcare", "FMCG", "Manufacturing", "Logistics"]
-TOOLS = ["VSM", "5S", "Lean", "TPM", "Six Sigma", "Kanban"]
-
-# ======================================================
-# SIMPLE SENTENCE TOKENIZER (CLOUD SAFE)
-# ======================================================
-def simple_sent_tokenize(text):
-    return [s.strip() for s in re.split(r'[.!?]\s+', text) if len(s.strip()) > 20]
-
-# ======================================================
-# FILE HANDLING
+# FILE SCAN + TEXT EXTRACTION
 # ======================================================
 def scan_folder(path):
     files = []
     for root, _, filenames in os.walk(path):
         for f in filenames:
             full = os.path.join(root, f)
-            stat = os.stat(full)
             files.append({
-                "title": f,
+                "name": f,
                 "path": full,
                 "ext": Path(f).suffix.lower(),
-                "date": datetime.fromtimestamp(stat.st_mtime)
+                "date": datetime.fromtimestamp(os.stat(full).st_mtime)
             })
     return files
 
@@ -75,6 +48,7 @@ def extract_text(file):
         if file["ext"] == ".pdf":
             doc = fitz.open(file["path"])
             return " ".join(p.get_text() for p in doc)[:4000]
+
         if file["ext"] in [".ppt", ".pptx"]:
             prs = Presentation(file["path"])
             return " ".join(
@@ -86,140 +60,100 @@ def extract_text(file):
     return ""
 
 # ======================================================
-# AI-LIKE ANALYSIS (RULE BASED, STABLE)
+# PROJECT INTELLIGENCE (RULE BASED)
 # ======================================================
-def analyze_document(text):
-    if not text:
-        return {
-            "summary": "No readable content.",
-            "problem": "Information unavailable",
-            "insight": "Document could not be parsed",
-            "impact": "Not quantified",
-            "tools": ["General"]
-        }
+def analyze_project(text):
+    industry = find_first(
+        text,
+        ["automotive", "healthcare", "fmcg", "manufacturing", "logistics", "retail"],
+        "Industry not specified"
+    )
 
-    sents = simple_sent_tokenize(text)
-    summary = " ".join(sents[:2]) if sents else "No preview available"
+    objective = find_first(
+        text,
+        ["objective", "aim", "goal", "challenge", "problem"],
+        "Improve operational performance"
+    )
 
-    problem = next((s for s in sents if any(k in s.lower() for k in
-                ["delay", "ineff", "bottleneck", "waste", "error"])), "Operational inefficiencies identified")
+    result = find_first(
+        text,
+        ["reduc", "improv", "increase", "%", "saving", "impact"],
+        "Operational improvements achieved"
+    )
 
-    insight = next((s for s in sents if any(k in s.lower() for k in
-                ["analysis", "identified", "root", "revealed"])), "Process analysis highlighted improvement levers")
+    tools = []
+    for t in ["vsm", "5s", "lean", "six sigma", "tpm", "kanban"]:
+        if t in text.lower():
+            tools.append(t.upper())
 
-    impact = next((s for s in sents if any(k in s.lower() for k in
-                ["reduc", "improv", "%", "increase", "saving"])), "Potential efficiency and cost improvements")
-
-    tools = [t for t in TOOLS if t.lower() in text.lower()]
     if not tools:
         tools = ["General"]
 
-    return {
-        "summary": summary,
-        "problem": problem,
-        "insight": insight,
-        "impact": impact,
-        "tools": tools
-    }
+    return industry, objective, result, ", ".join(tools)
 
 # ======================================================
 # HEADER
 # ======================================================
-st.title("🚀 FABER NEXUS")
-st.caption("Consulting Knowledge & Intelligence OS")
+st.title("📂 Project Intelligence Dashboard")
+st.caption("Industry | Objectives | Results | Tools | File Reference")
 st.divider()
 
 # ======================================================
-# SIDEBAR — GOOGLE DRIVE
+# GOOGLE DRIVE INPUT
 # ======================================================
-with st.sidebar:
-    drive_link = st.text_input(
-        "🔗 Google Drive Folder Link",
-        help="Set access: Anyone with link → Viewer"
-    )
+drive_link = st.text_input(
+    "🔗 Paste Google Drive Folder Link (Viewer access)",
+    help="Right click folder → Get link → Anyone with link → Viewer"
+)
 
-    if st.button("📥 Load Internal Brain") and drive_link:
-        with st.spinner("Downloading files from Google Drive..."):
-            gdown.download_folder(
-                drive_link,
-                output="internal_drive",
-                quiet=True,
-                use_cookies=False
-            )
-        st.success("Internal Brain loaded")
+if st.button("📥 Load Projects") and drive_link:
+    with st.spinner("Loading files from Google Drive..."):
+        gdown.download_folder(
+            drive_link,
+            output="drive_projects",
+            quiet=True,
+            use_cookies=False
+        )
+    st.success("Projects loaded successfully")
 
 # ======================================================
-# BUILD INTERNAL BRAIN
+# BUILD PROJECT CARDS
 # ======================================================
-CARDS = []
-DRIVE_DIR = "internal_drive"
+PROJECTS = []
+DRIVE_DIR = "drive_projects"
 
 if os.path.exists(DRIVE_DIR):
     for f in scan_folder(DRIVE_DIR):
         text = extract_text(f)
-        analysis = analyze_document(text)
+        industry, objective, result, tools = analyze_project(text)
 
-        CARDS.append({
-            "title": f["title"],
-            "date": f["date"],
-            "summary": analysis["summary"],
-            "problem": analysis["problem"],
-            "insight": analysis["insight"],
-            "impact": analysis["impact"],
-            "tools": ", ".join(analysis["tools"])
+        PROJECTS.append({
+            "name": f["name"],
+            "industry": industry,
+            "objective": objective,
+            "result": result,
+            "tools": tools,
+            "path": f["path"]
         })
 
 # ======================================================
-# KPI ROLLUPS (ACROSS ALL FILES)
+# DISPLAY PROJECT CARDS
 # ======================================================
-total_files = len(CARDS)
-tool_count = pd.Series(
-    ",".join(c["tools"] for c in CARDS).split(",")
-).value_counts() if CARDS else pd.Series()
-
-# ======================================================
-# TABS
-# ======================================================
-tab1, tab2 = st.tabs(["🧠 Internal Brain", "📊 Portfolio KPIs"])
-
-# ======================================================
-# TAB 1 — INTERNAL BRAIN CARDS
-# ======================================================
-with tab1:
-    st.subheader("📂 Internal Brain – Problem | Insight | Impact")
-
+if PROJECTS:
     cols = st.columns(3)
-    for i, c in enumerate(CARDS):
+
+    for i, p in enumerate(PROJECTS):
         with cols[i % 3]:
             with st.container(border=True):
-                st.markdown(f"### {c['title']}")
-                st.caption(c["date"].strftime("%d %b %Y"))
-                st.write(f"**Problem:** {c['problem']}")
-                st.write(f"**Insight:** {c['insight']}")
-                st.write(f"**Impact:** {c['impact']}")
-                st.divider()
-                st.caption(f"Tools: {c['tools']}")
+                st.markdown(f"### {p['name']}")
+                st.markdown(f"**Industry:** {p['industry']}")
+                st.markdown(f"**Objectives:** {p['objective']}")
+                st.markdown(f"**Results:** {p['result']}")
+                st.markdown(f"**Tool Used:** {p['tools']}")
+                st.caption(f"📄 File reference: `{p['name']}`")
 
-# ======================================================
-# TAB 2 — KPI ROLLUPS
-# ======================================================
-with tab2:
-    st.subheader("📊 Knowledge Portfolio KPIs")
-
-    k1, k2, k3 = st.columns(3)
-    k1.metric("Total Files Analysed", total_files)
-    k2.metric("Distinct Tools Used", tool_count.count())
-    k3.metric("Most Frequent Tool", tool_count.idxmax() if not tool_count.empty else "—")
-
-    if not tool_count.empty:
-        fig = px.bar(
-            tool_count.reset_index(),
-            x="index",
-            y=0,
-            labels={"index": "Tool", "0": "Document Count"},
-            title="Tool Usage Across Knowledge Base"
-        )
-        st.plotly_chart(fig, use_container_width=True)
+else:
+    st.info("Load a Google Drive folder to see projects.")
 
 st.divider()
-st.caption("Faber Infinite Consulting | Knowledge OS")
+st.caption("Faber Infinite Consulting | Project Intelligence System")
