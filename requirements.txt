@@ -1,6 +1,5 @@
 streamlit
 pandas
-plotly
 gdown
 PyMuPDF
 python-pptx
